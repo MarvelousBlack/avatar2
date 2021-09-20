@@ -85,7 +85,7 @@ def video2img(file):
     try:
         videoCapture = cv2.VideoCapture(file)
         length = int(videoCapture.get(cv2.CAP_PROP_FRAME_COUNT))
-        seekframe = random.randint(0,length)
+        seekframe = random.randint(0,length-1)
         videoCapture.set(cv2.CAP_PROP_POS_FRAMES,seekframe)
         success, frame = videoCapture.read()
         image = frame
@@ -186,9 +186,11 @@ async def get_link_image(event):
     mr = await event.reply("Downloading ...")
     try:
         r = requests.get(link_ids[0],headers=headers) 
-        preview = link_preview("http://localhost", r.text,parser="lxml")
-        r = requests.get(preview.image,headers=headers)
         f_mime_type = magic.detect_from_content(r.content).mime_type
+        if "html" in f_mime_type:
+            preview = link_preview("http://localhost", r.text,parser="lxml")
+            r = requests.get(preview.image,headers=headers)
+            f_mime_type = magic.detect_from_content(r.content).mime_type
         if "image" in f_mime_type:
             logger.debug(f_mime_type)
             img_buf = np.asarray(bytearray(r.content), dtype="uint8")
@@ -213,7 +215,7 @@ async def get_pixiv_image(event):
             pic_num = 0
     replymsg = await event.message.get_reply_message()
     try:
-        image_ids = re.findall('(\d+)',replymsg.message)
+        image_ids = re.findall('(\d{6,})',replymsg.message)
         logger.debug(image_ids)
     except Exception as e:
         m = await event.reply("你怎麼什麼都沒給")
@@ -222,28 +224,27 @@ async def get_pixiv_image(event):
         m = await event.reply("找不到圖片id")
         return 1
     mr = await event.reply("Downloading ...")
-    if len(image_ids[0]) > 5:
-        try:
-            if pic_num == 0:
-                r = requests.get(artworks_root+image_ids[0]+'.png')
-                f_mime_type = magic.detect_from_content(r.content).mime_type
-            else:
-                f_mime_type = "html"
-            if "html"  in f_mime_type:
-                r = requests.get(artworks_root+image_ids[0]+'-{}.png'.format(pic_num+1),headers=headers)
-                f_mime_type = magic.detect_from_content(r.content).mime_type
-            if "image" in f_mime_type:
-                logger.debug(f_mime_type)
-                img_buf = np.asarray(bytearray(r.content), dtype="uint8")
-                image = cv2.imdecode(img_buf, cv2.IMREAD_UNCHANGED)
-            else:
-                raise Exception('UNKNOW!')
-        except BaseException as e:
-            logger.error(e)
-            m = await event.reply("´_>`, {}".format(e))
-            return -1
-        finally:
-            await mr.delete()
+    try:
+        if pic_num == 0:
+            r = requests.get(artworks_root+image_ids[0]+'.png')
+            f_mime_type = magic.detect_from_content(r.content).mime_type
+        else:
+            f_mime_type = "html"
+        if "html"  in f_mime_type:
+            r = requests.get(artworks_root+image_ids[0]+'-{}.png'.format(pic_num+1),headers=headers)
+            f_mime_type = magic.detect_from_content(r.content).mime_type
+        if "image" in f_mime_type:
+            logger.debug(f_mime_type)
+            img_buf = np.asarray(bytearray(r.content), dtype="uint8")
+            image = cv2.imdecode(img_buf, cv2.IMREAD_UNCHANGED)
+        else:
+            raise Exception('UNKNOW!')
+    except BaseException as e:
+        logger.error(e)
+        m = await event.reply("´_>`, {}".format(e))
+        return -1
+    finally:
+        await mr.delete()
     return image
 
 async def get_telegram_img(event):
@@ -326,7 +327,7 @@ async def avatar(event,
         if animeface_detect:
             img = img_animeface_detect(img)
         
-        file_name = '/tmp/avatar{}.png'.format(event.chat_id)
+        file_name = '/tmp/avatar{}.jpg'.format(event.chat_id)
         cv2.imwrite(file_name,img)
 
         upload_file_result = await client.upload_file(file_name)
