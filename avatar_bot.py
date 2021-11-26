@@ -116,11 +116,19 @@ def img_animeface_detect(image,cascade_file = "./lbpcascade_animeface.xml"):
                                      scaleFactor = 1.1,
                                      minNeighbors = 5,
                                      minSize = (24, 24))
-    if len(faces) != 0:
+    faces_num = len(faces)
+    if faces_num != 0:
+        logger.info("%s animeface detected!",faces_num)
+        face_x = 0
+        face_y = 0
         logger.debug(faces)
-        x, y, w, h = faces[0]
-        face_x = int(x+w/2)
-        face_y = int(y+h/2)
+        for face in faces:
+            x, y, w, h = face
+            face_x += (x+w/2)/faces_num
+            face_y += (y+h/2)/faces_num
+            #cv2.rectangle(image, (x, y), (x + w, y + h), (0, 0, 255), 2)
+        face_x = int(face_x)
+        face_y = int(face_y)
         if rows > cols:
             cxmin = 0
             cxmax = cols
@@ -144,7 +152,6 @@ def img_animeface_detect(image,cascade_file = "./lbpcascade_animeface.xml"):
                 cxmin = cols - rows
                 cxmax = cols
         logger.debug((cxmin,cxmax,cymin,cymax))
-        #cv2.rectangle(image, (x, y), (x + w, y + h), (0, 0, 255), 2)
         img = image[cymin:cymax,cxmin:cxmax,:]
         return img
     else:
@@ -301,7 +308,7 @@ async def avatar(event,
                 event.chat_id)
     # check chat in chat whitelist
     if not is_chat_in_whitelist(event.chat_id):
-        m = await event.reply("如果需要使用請先聯系 @MarvelousBlack 將該羣加入白名單。chat_id={}".format(event.chat_id))
+        m = await event.reply("如果需要使用請先聯系 bot 管理員將該羣加入白名單。chat_id={}".format(event.chat_id))
         return -1
     # check time limit 
     if not await is_timeup(event):
