@@ -60,8 +60,15 @@ async def get_args(event):
             rgb = tuple(int(hexrgb[i:i+2], 16) for i in (0, 2, 4))
         except Exception as e:
             logger.error(e)
-            m = await event.reply("參數格式錯誤！")
-    return rgb
+            m = await event.reply("顏色參數格式錯誤！")
+    animeface_detect_num = 0
+    if '%' in event.raw_text:
+        try:
+            animeface_detect_num = int(str(event.raw_text).split("%")[1].split(' ')[0])
+        except Exception as e:
+            m = await event.reply("頭參數錯誤！")
+            animeface_detect_num = 0
+    return [rgb,animeface_detect_num]
 
 async def is_timeup(event):
     global last_all
@@ -118,7 +125,7 @@ def img_resize(img):
     img = cv2.resize(img,None,fx=scale_factor,fy=scale_factor,interpolation=cv2.INTER_AREA)
     return img
     
-def img_animeface_detect(image,cascade_file = "./lbpcascade_animeface.xml",crop = True):
+def img_animeface_detect(image,cascade_file = "./lbpcascade_animeface.xml",crop = True,animeface_arg = -1):
     rows,cols,channels = image.shape
     logger.debug(image.shape)
     cascade = cv2.CascadeClassifier(cascade_file)
@@ -134,12 +141,17 @@ def img_animeface_detect(image,cascade_file = "./lbpcascade_animeface.xml",crop 
         face_x = 0
         face_y = 0
         logger.debug(faces)
-        for face in faces:
-            x, y, w, h = face
-            face_x += (x+w/2)/faces_num
-            face_y += (y+h/2)/faces_num
-            if crop == False:
-                cv2.rectangle(image, (x, y), (x + w, y + h), (0, 0, 255), 5)
+        if animeface_arg == -1:
+            for face in faces:
+                x, y, w, h = face
+                face_x += (x+w/2)/faces_num
+                face_y += (y+h/2)/faces_num
+                if crop == False:
+                    cv2.rectangle(image, (x, y), (x + w, y + h), (0, 0, 255), 5)
+        elif -1 < animeface_arg < faces_num:
+                x, y, w, h = faces[animeface_arg]
+                face_x += (x+w/2)
+                face_y += (y+h/2)
         if crop == False:
             return image
         face_x = int(face_x)
@@ -331,7 +343,7 @@ async def avatar(event,
                 m = await event.reply("你的頭呢？")
             raise Exception('Can not get image!')
 
-        rgb = await get_args(event)
+        rgb,animeface_detect_num = await get_args(event)
 
         # img channl = 4 add background
         img = await add_img_bcakground(event,img,rgb)
@@ -341,7 +353,7 @@ async def avatar(event,
         
         # img animeface_detect
         if animeface_detect:
-            img = img_animeface_detect(img)
+            img = img_animeface_detect(img,animeface_arg=animeface_detect_num)
         
         file_name = '/tmp/avatar{}.jpg'.format(event.chat_id)
         cv2.imwrite(file_name,img)
@@ -377,7 +389,7 @@ async def animeface_detect_result(event):
                 m = await event.reply("圖？")
             raise Exception('Can not get image!')
 
-        rgb = await get_args(event)
+        rgb,*_ = await get_args(event)
 
         # img channl = 4 add background
         img = await add_img_bcakground(event,img,rgb)
