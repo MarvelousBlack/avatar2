@@ -51,6 +51,19 @@ def get_chat_time_limit(chat_id):
             return channel['time_limit']
     return None
 
+async def get_args(event):
+    rgb = (255,255,255)
+    if '#' in event.raw_text:
+        try:
+            hexrgb =str(event.raw_text).split("#")[1].split(' ')[0]
+            logger.debug(hexrgb)
+            rgb = tuple(int(hexrgb[i:i+2], 16) for i in (0, 2, 4))
+        except Exception as e:
+            logger.error(e)
+            m = await event.reply("參數格式錯誤！")
+    print(rgb)
+    return rgb
+
 async def is_timeup(event):
     global last_all
     for chat in last_all:
@@ -160,19 +173,11 @@ def img_animeface_detect(image,cascade_file = "./lbpcascade_animeface.xml"):
 
 
 
-async def add_img_bcakground(event,img):
+async def add_img_bcakground(event,img,rgb):
+    r,g,b = rgb
     rows,cols,channels = img.shape
-    r,g,b = (255,255,255)
     if channels != 4:
         return img
-    if '#' in event.raw_text:
-        try:
-            hexrgb =str(event.raw_text).split("#")[1].split(' ')[0]
-            logger.debug(hexrgb)
-            r,g,b = tuple(int(hexrgb[i:i+2], 16) for i in (0, 2, 4))
-        except Exception as e:
-            logger.error(e)
-            m = await event.reply("參數格式錯誤！")
 
     result = np.zeros((rows, cols, 3), np.uint8)
     alpha = img[:, :, 3] / 255.0
@@ -324,8 +329,10 @@ async def avatar(event,
                 m = await event.reply("你的頭呢？")
             raise Exception('Can not get image!')
 
+        rgb = await get_args(event)
+
         # img channl = 4 add background
-        img = await add_img_bcakground(event,img)
+        img = await add_img_bcakground(event,img,rgb)
 
         # resize image
         img = img_resize(img)
@@ -350,7 +357,6 @@ async def avatar(event,
         update_last(event,True)
         #await waitmsg.delete()
     return 0
-
 
 # Telegram commands handler
 
