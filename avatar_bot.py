@@ -61,7 +61,6 @@ async def get_args(event):
         except Exception as e:
             logger.error(e)
             m = await event.reply("參數格式錯誤！")
-    print(rgb)
     return rgb
 
 async def is_timeup(event):
@@ -119,7 +118,7 @@ def img_resize(img):
     img = cv2.resize(img,None,fx=scale_factor,fy=scale_factor,interpolation=cv2.INTER_AREA)
     return img
     
-def img_animeface_detect(image,cascade_file = "./lbpcascade_animeface.xml"):
+def img_animeface_detect(image,cascade_file = "./lbpcascade_animeface.xml",crop = True):
     rows,cols,channels = image.shape
     logger.debug(image.shape)
     cascade = cv2.CascadeClassifier(cascade_file)
@@ -139,7 +138,10 @@ def img_animeface_detect(image,cascade_file = "./lbpcascade_animeface.xml"):
             x, y, w, h = face
             face_x += (x+w/2)/faces_num
             face_y += (y+h/2)/faces_num
-            #cv2.rectangle(image, (x, y), (x + w, y + h), (0, 0, 255), 2)
+            if crop == False:
+                cv2.rectangle(image, (x, y), (x + w, y + h), (0, 0, 255), 5)
+        if crop == False:
+            return image
         face_x = int(face_x)
         face_y = int(face_y)
         if rows > cols:
@@ -358,6 +360,45 @@ async def avatar(event,
         #await waitmsg.delete()
     return 0
 
+async def animeface_detect_result(event):
+    sender = await event.get_sender()
+    logger.info("sender_id = %s,username= %s,sender first_name = %s,last_name=%s, message = %s,chat_id= %s",
+                event.message.from_id,
+                sender.username,sender.first_name,
+                sender.last_name,
+                event.message.message,
+                event.chat_id)
+    try:
+        # get img
+        img = await get_img(event,auto_detect=None)
+
+        if isinstance(img,int):
+            if img == 1:
+                m = await event.reply("圖？")
+            raise Exception('Can not get image!')
+
+        rgb = await get_args(event)
+
+        # img channl = 4 add background
+        img = await add_img_bcakground(event,img,rgb)
+
+        # resize image
+        img = img_resize(img)
+
+        # img animeface_detect
+        img = img_animeface_detect(img,crop=False)
+
+        file_name = '/tmp/avatar{}-animeface_detect_result.jpg'.format(event.chat_id)
+        cv2.imwrite(file_name,img)
+
+        # upload photo
+        m = await event.reply(file=file_name)
+        os.remove(file_name)
+        logger.info("success,chat_id = %s",event.chat_id)
+    except Exception as e:
+        logger.error(e)
+    return 0
+
 # Telegram commands handler
 
 @client.on(events.NewMessage(pattern=r'/start'))
@@ -402,6 +443,12 @@ async def handler(event):
     if '@' in event.message.message and not event.message.mentioned and bot_config['bot_name'] not in event.message.message:
         return -1
     await avatar(event,animeface_detect=True,auto_detect=None)
+
+@client.on(events.NewMessage(func=lambda e: not e.is_private,pattern=r'/show_animeface_detect_result'))
+async def handler(event):
+    if '@' in event.message.message and not event.message.mentioned and bot_config['bot_name'] not in event.message.message:
+        return -1
+    await animeface_detect_result(event)
 
 if __name__ == "__main__":
     try:
