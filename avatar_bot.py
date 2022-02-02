@@ -22,6 +22,7 @@ import random
 headers = {'User-Agent': 'Twitterbot'}
 artworks_root = ""
 last_all = []
+timeout=(3.0, 30)
 
 logging.basicConfig(format='[%(levelname) 5s/%(asctime)s] %(name)s: %(message)s',
                     level=logging.INFO)
@@ -211,11 +212,11 @@ async def get_link_image(event):
         return 1
     mr = await event.reply("Downloading ...")
     try:
-        r = requests.get(link_ids[0],headers=headers) 
+        r = requests.get(link_ids[0],headers=headers,timeout=timeout)
         f_mime_type = magic.detect_from_content(r.content).mime_type
         if "html" in f_mime_type:
             preview = link_preview("http://localhost", r.text,parser="lxml")
-            r = requests.get(preview.image,headers=headers)
+            r = requests.get(preview.image,headers=headers,timeout=timeout)
             f_mime_type = magic.detect_from_content(r.content).mime_type
         if "image" in f_mime_type:
             logger.debug(f_mime_type)
@@ -252,12 +253,12 @@ async def get_pixiv_image(event):
     mr = await event.reply("Downloading ...")
     try:
         if pic_num == 0:
-            r = requests.get(artworks_root+image_ids[0]+'.png')
+            r = requests.get(artworks_root+image_ids[0]+'.png',headers=headers,timeout=timeout)
             f_mime_type = magic.detect_from_content(r.content).mime_type
         else:
             f_mime_type = "html"
         if "html"  in f_mime_type:
-            r = requests.get(artworks_root+image_ids[0]+'-{}.png'.format(pic_num+1),headers=headers)
+            r = requests.get(artworks_root+image_ids[0]+'-{}.png'.format(pic_num+1),headers=headers,timeout=timeout)
             f_mime_type = magic.detect_from_content(r.content).mime_type
         if "image" in f_mime_type:
             logger.debug(f_mime_type)
