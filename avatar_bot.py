@@ -93,7 +93,9 @@ async def get_args(event,auto_detect=None):
     link = None
     link_text = ""
     replymsg = await event.message.get_reply_message()
+    has_replymsg = True
     if replymsg is None:
+        has_replymsg = False
         link_text = event.text
     elif replymsg.file is None:
         link_text = replymsg.text
@@ -103,6 +105,7 @@ async def get_args(event,auto_detect=None):
         link = re.findall('(?:(?:https?|ftp):\/\/)?[\w/\-?=%.]+\.[\w/\-&?=%.]+',link_text)[0]
     except Exception as e:
         link = None
+    args['has_replymsg'] = has_replymsg
     args['link'] = link
 
     # pixiv
@@ -296,7 +299,6 @@ async def get_link_image(link_id,pic_num):
     except BaseException as e:
         logger.error(e)
         image = "´_>`, {}".format(e)
-        return -1
     return image
 
 async def get_pixiv_image(pixiv_id,pic_num):
@@ -355,10 +357,12 @@ async def get_img(event,args,auto_detect):
     if auto_detect == 'link':
         img = await get_link_image(args['link'],args['pic_num'])
     if auto_detect == None:
-        if args['link'] == None:
+        if args['link'] == None and args['has_replymsg'] == True:
             img = await get_telegram_img(event)
-        else:
+        elif args['link'] is not None:
             img = await get_link_image(args['link'],args['pic_num'])
+        else:
+            img = 1
     return img
     
 async def avatar(event,
@@ -386,13 +390,13 @@ async def avatar(event,
         # get img
         img = await get_img(event,msg_args,auto_detect)
 
+        if isinstance(img,str):
+            m = await event.reply(img)
+            raise Exception(img)
         if isinstance(img,int):
             if img == 1:
                 m = await event.reply("你的頭呢？")
             raise Exception('Can not get image!')
-        if isinstance(img,str):
-            m = await event.reply(img)
-            raise Exception(img)
 
         # img channl = 4 add background
         img = await add_img_bcakground(img,msg_args['rgb'])
@@ -432,13 +436,13 @@ async def animeface_detect_result(event):
         # get img
         img = await get_img(event,msg_args,auto_detect=None)
 
+        if isinstance(img,str):
+            m = await event.reply(img)
+            raise Exception(img)
         if isinstance(img,int):
             if img == 1:
                 m = await event.reply("你的頭呢？")
             raise Exception('Can not get image!')
-        if isinstance(img,str):
-            m = await event.reply(img)
-            raise Exception(img)
 
         # img channl = 4 add background
         img = await add_img_bcakground(img,msg_args['rgb'])
