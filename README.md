@@ -16,6 +16,6 @@ if you want to use anime face detcet function, you need to download a lbpcascade
 - filemagic
 - numpy
 - request
-- linkpreview
+- BeautifulSoup
 
 

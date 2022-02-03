@@ -16,8 +16,10 @@ import re
 import requests 
 import magic
 import yaml
-from linkpreview import link_preview
+from bs4 import BeautifulSoup
+from urllib.parse import urlparse,urljoin
 import random
+
 
 headers = {'User-Agent': 'Twitterbot'}
 artworks_root = ""
@@ -180,7 +182,19 @@ def img_resize(img):
         scale_factor = 2048/rows
     img = cv2.resize(img,None,fx=scale_factor,fy=scale_factor,interpolation=cv2.INTER_AREA)
     return img
-    
+
+def link_image_preview(link_content,tw=False):
+    soup = BeautifulSoup(link_content, "lxml")
+
+    #OpenGraph
+    image_links = soup.find_all("meta",attrs={"property": "og:image"})
+
+    #twitter workaround
+    if tw:
+        image_links = soup.find_all("meta",attrs={"itemprop": "contentUrl"})
+
+    return image_links
+
 def img_animeface_detect(image,cascade_file = "./lbpcascade_animeface.xml",crop = True,animeface_arg = -1):
     rows,cols,channels = image.shape
     logger.debug(image.shape)
@@ -261,10 +275,17 @@ async def get_link_image(link_id,pic_num):
         return 1
     try:
         r = requests.get(link_id,headers=headers,timeout=timeout)
+        web_hostname = urlparse(r.url).hostname
         f_mime_type = magic.detect_from_content(r.content).mime_type
         if "html" in f_mime_type:
-            preview = link_preview("http://localhost", r.text,parser="lxml")
-            r = requests.get(preview.image,headers=headers,timeout=timeout)
+            twitter_workaround = ( web_hostname == 'twitter.com' )
+            preview_images = link_image_preview(r.text,twitter_workaround)
+            if preview_images == []:
+                raise Exception('Can not find pic in this link!')
+            preview_image = preview_images[pic_num]["content"]
+            if preview_image.startswith("/"):
+                preview_image = urljoin(r.url,preview_image)
+            r = requests.get(preview_image,headers=headers,timeout=timeout)
             f_mime_type = magic.detect_from_content(r.content).mime_type
         if "image" in f_mime_type:
             logger.debug(f_mime_type)
