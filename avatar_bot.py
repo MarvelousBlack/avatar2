@@ -92,11 +92,11 @@ async def get_args(event,auto_detect=None):
     link_text = ""
     replymsg = await event.message.get_reply_message()
     if replymsg is None:
-        link_text = event.raw_text
+        link_text = event.text
     elif replymsg.file is None:
-        link_text = replymsg.message
+        link_text = replymsg.text
     elif auto_detect == 'link' or auto_detect == 'pixiv':
-        link_text = replymsg.message
+        link_text = replymsg.text
     try:
         link = re.findall('(?:(?:https?|ftp):\/\/)?[\w/\-?=%.]+\.[\w/\-&?=%.]+',link_text)[0]
     except Exception as e:
