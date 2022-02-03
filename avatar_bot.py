@@ -52,7 +52,10 @@ def get_chat_time_limit(chat_id):
             return channel['time_limit']
     return None
 
-async def get_args(event):
+async def get_args(event,auto_detect=None):
+    args={}
+
+    # background color
     rgb = (255,255,255)
     if '#' in event.raw_text:
         try:
@@ -62,14 +65,58 @@ async def get_args(event):
         except Exception as e:
             logger.error(e)
             m = await event.reply("顏色參數格式錯誤！")
+    args['rgb'] = rgb
+
+    # which face
     animeface_detect_num = 0
-    if '%' in event.raw_text:
+    if '*' in event.raw_text:
         try:
-            animeface_detect_num = int(str(event.raw_text).split("%")[1].split(' ')[0])
+            animeface_detect_num = int(str(event.raw_text).split("*")[1].split(' ')[0])
         except Exception as e:
             m = await event.reply("頭參數錯誤！")
             animeface_detect_num = 0
-    return [rgb,animeface_detect_num]
+    args['animeface_detect_num'] = animeface_detect_num
+
+    #which pic
+    pic_num = 0
+    if '!' in event.raw_text:
+        try:
+            pic_num = int(str(event.raw_text).split("!")[1].split(' ')[0])
+        except Exception as e:
+            m = await event.reply("圖片張數參數格式錯誤！")
+            pic_num = 0
+    args['pic_num'] = pic_num
+
+    # try get image in link
+    link = None
+    link_text = ""
+    replymsg = await event.message.get_reply_message()
+    if replymsg is None:
+        link_text = event.raw_text
+    elif replymsg.file is None:
+        link_text = replymsg.message
+    elif auto_detect == 'link' or auto_detect == 'pixiv':
+        link_text = replymsg.message
+    try:
+        link = re.findall('(?:(?:https?|ftp):\/\/)?[\w/\-?=%.]+\.[\w/\-&?=%.]+',link_text)[0]
+    except Exception as e:
+        link = None
+    args['link'] = link
+
+    # pixiv
+    pixiv_id = -1
+    if auto_detect == 'pixiv':
+        try:
+            pixiv_ids = re.findall('(\d{6,})',link_text)
+        except Exception as e:
+            m = await event.reply("？")
+        if pixiv_ids == []:
+            m = await event.reply("找不到圖片id")
+        else:
+            pixiv_id = pixiv_ids[0]
+    args['pixiv_id'] = pixiv_id
+    logger.debug("msg args:%s",args)
+    return args
 
 async def is_timeup(event):
     global last_all
@@ -100,6 +147,14 @@ def update_last(event,processing_only=False):
             if not processing_only:
                 chat['last'] = event.message.date
     return 0
+
+async def update_channel_avatar(event,media_file):
+    upload_file_result = await client.upload_file(media_file)
+    os.remove(media_file)
+    input_chat_uploaded_photo = InputChatUploadedPhoto(upload_file_result)
+    result = await client(EditPhotoRequest(channel=event.message.to_id,
+    photo=input_chat_uploaded_photo))
+    return result
 
 def video2img(file):
     try:
@@ -188,7 +243,7 @@ def img_animeface_detect(image,cascade_file = "./lbpcascade_animeface.xml",crop 
 
 
 
-async def add_img_bcakground(event,img,rgb):
+async def add_img_bcakground(img,rgb):
     r,g,b = rgb
     rows,cols,channels = img.shape
     if channels != 4:
@@ -201,18 +256,11 @@ async def add_img_bcakground(event,img,rgb):
     result[:, :, 2] = (1. - alpha) * r + alpha * img[:, :, 2]
     return result
 
-async def get_link_image(event):
-    replymsg = await event.message.get_reply_message()
-    try:
-        link_ids = re.findall('(?:(?:https?|ftp):\/\/)?[\w/\-?=%.]+\.[\w/\-&?=%.]+',replymsg.message)
-        logger.debug(link_ids)
-    except Exception as e:
+async def get_link_image(link_id,pic_num):
+    if link_id == None:
         return 1
-    if link_ids == []:
-        return 1
-    mr = await event.reply("Downloading ...")
     try:
-        r = requests.get(link_ids[0],headers=headers,timeout=timeout)
+        r = requests.get(link_id,headers=headers,timeout=timeout)
         f_mime_type = magic.detect_from_content(r.content).mime_type
         if "html" in f_mime_type:
             preview = link_preview("http://localhost", r.text,parser="lxml")
@@ -226,39 +274,21 @@ async def get_link_image(event):
             raise Exception('UNKNOW!')
     except BaseException as e:
         logger.error(e)
-        m = await event.reply("´_>`, {}".format(e))
+        image = "´_>`, {}".format(e)
         return -1
-    finally:
-        await mr.delete()
     return image
 
-async def get_pixiv_image(event):
-    pic_num = 0
-    if '!' in event.raw_text:
-        try:
-            pic_num = int(str(event.raw_text).split("!")[1].split(' ')[0])
-        except Exception as e:
-            m = await event.reply("參數格式錯誤！")
-            pic_num = 0
-    replymsg = await event.message.get_reply_message()
-    try:
-        image_ids = re.findall('(\d{6,})',replymsg.message)
-        logger.debug(image_ids)
-    except Exception as e:
-        m = await event.reply("你怎麼什麼都沒給")
-        return 1
-    if image_ids == []:
-        m = await event.reply("找不到圖片id")
-        return 1
-    mr = await event.reply("Downloading ...")
+async def get_pixiv_image(pixiv_id,pic_num):
+    if pixiv_id == -1:
+        return -1
     try:
         if pic_num == 0:
-            r = requests.get(artworks_root+image_ids[0]+'.png',headers=headers,timeout=timeout)
+            r = requests.get(artworks_root+pixiv_id+'.png',headers=headers,timeout=timeout)
             f_mime_type = magic.detect_from_content(r.content).mime_type
         else:
             f_mime_type = "html"
         if "html"  in f_mime_type:
-            r = requests.get(artworks_root+image_ids[0]+'-{}.png'.format(pic_num+1),headers=headers,timeout=timeout)
+            r = requests.get(artworks_root+pixiv_id+'-{}.png'.format(pic_num+1),headers=headers,timeout=timeout)
             f_mime_type = magic.detect_from_content(r.content).mime_type
         if "image" in f_mime_type:
             logger.debug(f_mime_type)
@@ -268,10 +298,7 @@ async def get_pixiv_image(event):
             raise Exception('UNKNOW!')
     except BaseException as e:
         logger.error(e)
-        m = await event.reply("´_>`, {}".format(e))
-        return -1
-    finally:
-        await mr.delete()
+        image = "´_>`, {}".format(e)
     return image
 
 async def get_telegram_img(event):
@@ -301,19 +328,16 @@ async def get_telegram_img(event):
             m = await event.reply("出錯了！".format(e))
             return -1
 
-async def get_img(event,auto_detect):
+async def get_img(event,args,auto_detect):
     if auto_detect == 'pixiv':
-        img = await get_pixiv_image(event)
+        img = await get_pixiv_image(args['pixiv_id'],args['pic_num'])
     if auto_detect == 'link':
-        img = await get_link_image(event)
+        img = await get_link_image(args['link'],args['pic_num'])
     if auto_detect == None:
-        replymsg = await event.message.get_reply_message()
-        if replymsg is None:
-            img = await get_link_image(event)
-        elif replymsg.file is None:
-            img = await get_link_image(event)
-        else:
+        if args['link'] == None:
             img = await get_telegram_img(event)
+        else:
+            img = await get_link_image(args['link'],args['pic_num'])
     return img
     
 async def avatar(event,
@@ -336,34 +360,34 @@ async def avatar(event,
 
     #waitmsg = await event.reply("處理中...")
     try:
+        msg_args = await get_args(event,auto_detect)
+
         # get img
-        img = await get_img(event,auto_detect)
+        img = await get_img(event,msg_args,auto_detect)
 
         if isinstance(img,int):
             if img == 1:
                 m = await event.reply("你的頭呢？")
             raise Exception('Can not get image!')
-
-        rgb,animeface_detect_num = await get_args(event)
+        if isinstance(img,str):
+            m = await event.reply(img)
+            raise Exception(img)
 
         # img channl = 4 add background
-        img = await add_img_bcakground(event,img,rgb)
+        img = await add_img_bcakground(img,msg_args['rgb'])
 
         # resize image
         img = img_resize(img)
         
         # img animeface_detect
         if animeface_detect:
-            img = img_animeface_detect(img,animeface_arg=animeface_detect_num)
+            img = img_animeface_detect(img,animeface_arg=msg_args['animeface_detect_num'])
         
         file_name = '/tmp/avatar{}.jpg'.format(event.chat_id)
         cv2.imwrite(file_name,img)
 
-        upload_file_result = await client.upload_file(file_name)
-        os.remove(file_name)
-        input_chat_uploaded_photo = InputChatUploadedPhoto(upload_file_result)
-        result = await client(EditPhotoRequest(channel=event.message.to_id,
-        photo=input_chat_uploaded_photo))
+        await update_channel_avatar(event,file_name)
+
         update_last(event)
         logger.info("success,chat_id = %s",event.chat_id)
     except Exception as e:
@@ -382,18 +406,21 @@ async def animeface_detect_result(event):
                 event.message.message,
                 event.chat_id)
     try:
+        msg_args = await get_args(event)
+
         # get img
-        img = await get_img(event,auto_detect=None)
+        img = await get_img(event,msg_args,auto_detect=None)
 
         if isinstance(img,int):
             if img == 1:
-                m = await event.reply("圖？")
+                m = await event.reply("你的頭呢？")
             raise Exception('Can not get image!')
-
-        rgb,*_ = await get_args(event)
+        if isinstance(img,str):
+            m = await event.reply(img)
+            raise Exception(img)
 
         # img channl = 4 add background
-        img = await add_img_bcakground(event,img,rgb)
+        img = await add_img_bcakground(img,msg_args['rgb'])
 
         # resize image
         img = img_resize(img)
@@ -457,7 +484,7 @@ async def handler(event):
         return -1
     await avatar(event,animeface_detect=True,auto_detect=None)
 
-@client.on(events.NewMessage(func=lambda e: not e.is_private,pattern=r'/show_animeface_detect_result'))
+@client.on(events.NewMessage(pattern=r'/show_animeface_detect_result'))
 async def handler(event):
     if '@' in event.message.message and not event.message.mentioned and bot_config['bot_name'] not in event.message.message:
         return -1
