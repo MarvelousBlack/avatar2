@@ -186,15 +186,11 @@ def img_resize(img):
     img = cv2.resize(img,None,fx=scale_factor,fy=scale_factor,interpolation=cv2.INTER_AREA)
     return img
 
-def link_image_preview(link_content,tw=False):
+def link_image_preview(link_content):
     soup = BeautifulSoup(link_content, "lxml")
 
     #OpenGraph
     image_links = soup.find_all("meta",attrs={"property": "og:image"})
-
-    #twitter workaround
-    if tw:
-        image_links = soup.find_all("meta",attrs={"itemprop": "contentUrl"})
 
     return image_links
 
@@ -281,8 +277,7 @@ async def get_link_image(link_id,pic_num):
         web_hostname = urlparse(r.url).hostname
         f_mime_type = magic.detect_from_content(r.content).mime_type
         if "html" in f_mime_type:
-            twitter_workaround = ( web_hostname == 'twitter.com' )
-            preview_images = link_image_preview(r.text,twitter_workaround)
+            preview_images = link_image_preview(r.text)
             if preview_images == []:
                 raise Exception('Can not find pic in this link!')
             preview_image = preview_images[pic_num]["content"]
