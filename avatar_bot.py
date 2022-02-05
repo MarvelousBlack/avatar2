@@ -171,7 +171,7 @@ def video2img(file):
         image = frame
     except Exception as e:
         logger.error(e)
-        image = -1
+        image = str(e)
     finally:
         videoCapture.release()
         os.remove(file)
@@ -254,8 +254,6 @@ def img_animeface_detect(image,cascade_file = "./lbpcascade_animeface.xml",crop 
         logger.info("no animeface detected!")
         return image
 
-
-
 async def add_img_bcakground(img,rgb):
     r,g,b = rgb
     rows,cols,channels = img.shape
@@ -273,6 +271,8 @@ async def get_link_image(link_id,pic_num):
     if link_id == None:
         return 1
     try:
+        if len(urlparse(link_id).scheme) == 0:
+            link_id = urlparse("//"+link_id)._replace(scheme='http').geturl()
         r = requests.get(link_id,headers=headers,timeout=timeout)
         web_hostname = urlparse(r.url).hostname
         f_mime_type = magic.detect_from_content(r.content).mime_type
@@ -298,7 +298,7 @@ async def get_link_image(link_id,pic_num):
 
 async def get_pixiv_image(pixiv_id,pic_num):
     if pixiv_id == -1:
-        return -1
+        return 1
     try:
         if pic_num == 0:
             r = requests.get(artworks_root+pixiv_id+'.png',headers=headers,timeout=timeout)
@@ -412,6 +412,7 @@ async def avatar(event,
         logger.info("success,chat_id = %s",event.chat_id)
     except Exception as e:
         logger.error(e)
+        m = await event.reply("內部錯誤")
     finally:
         update_last(event,True)
         #await waitmsg.delete()
@@ -457,6 +458,7 @@ async def animeface_detect_result(event):
         logger.info("success,chat_id = %s",event.chat_id)
     except Exception as e:
         logger.error(e)
+        m = await event.reply("內部錯誤")
     return 0
 
 # Telegram commands handler
